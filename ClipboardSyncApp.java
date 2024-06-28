@@ -16,7 +16,7 @@ public class ClipboardSyncApp {
     public static void main(String[] args) {
         JFrame frame = new JFrame("Clipboard Sync App");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(300, 250);
+        frame.setSize(300, 300);
 
         JPanel panel = new JPanel();
         frame.add(panel);
@@ -52,10 +52,15 @@ public class ClipboardSyncApp {
         registerButton.setBounds(100, 80, 100, 25);
         panel.add(registerButton);
 
-        JButton syncButton = new JButton("Sync Clipboard");
-        syncButton.setBounds(10, 120, 250, 25);
-        syncButton.setEnabled(false);
-        panel.add(syncButton);
+        JButton pushButton = new JButton("Push Clipboard");
+        pushButton.setBounds(10, 120, 250, 25);
+        pushButton.setEnabled(false);
+        panel.add(pushButton);
+
+        JButton pullButton = new JButton("Pull Clipboard");
+        pullButton.setBounds(10, 160, 250, 25);
+        pullButton.setEnabled(false);
+        panel.add(pullButton);
 
         loginButton.addActionListener(new ActionListener() {
             @Override
@@ -66,7 +71,8 @@ public class ClipboardSyncApp {
                     String response = login(username, password);
                     if (response != null) {
                         accessToken = response;
-                        syncButton.setEnabled(true);
+                        pushButton.setEnabled(true);
+                        pullButton.setEnabled(true);
                         JOptionPane.showMessageDialog(panel, "Login successful!");
                     } else {
                         JOptionPane.showMessageDialog(panel, "Login failed!");
@@ -95,14 +101,27 @@ public class ClipboardSyncApp {
             }
         });
 
-        syncButton.addActionListener(new ActionListener() {
+        pushButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
                 try {
                     String clipboardContent = getClipboardContents();
                     updateClipboard(clipboardContent);
-                    JOptionPane.showMessageDialog(panel, "Clipboard synced!");
+                    JOptionPane.showMessageDialog(panel, "Clipboard pushed!");
                 } catch (IOException | UnsupportedFlavorException ex) {
+                    ex.printStackTrace();
+                }
+            }
+        });
+
+        pullButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    String clipboardContent = fetchClipboard();
+                    setClipboardContents(clipboardContent);
+                    JOptionPane.showMessageDialog(panel, "Clipboard pulled!");
+                } catch (IOException ex) {
                     ex.printStackTrace();
                 }
             }
@@ -178,6 +197,27 @@ public class ClipboardSyncApp {
         }
     }
 
+    private static String fetchClipboard() throws IOException {
+        URL url = new URL(serverUrl + "/clipboard");
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("GET");
+        conn.setRequestProperty("Authorization", "Bearer " + accessToken);
+
+        int responseCode = conn.getResponseCode();
+        if (responseCode == 200) {
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                StringBuilder response = new StringBuilder();
+                String responseLine;
+                while ((responseLine = br.readLine()) != null) {
+                    response.append(responseLine.trim());
+                }
+                return response.toString().split(":")[1].replaceAll("[\"}]", ""); // Extracting the clipboard content from the response
+            }
+        } else {
+            throw new IOException("Failed to fetch clipboard: " + responseCode);
+        }
+    }
+
     private static String getClipboardContents() throws UnsupportedFlavorException, IOException {
         Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
         Transferable contents = clipboard.getContents(null);
@@ -186,5 +226,11 @@ public class ClipboardSyncApp {
             return (String) contents.getTransferData(DataFlavor.stringFlavor);
         }
         return "";
+    }
+
+    private static void setClipboardContents(String str) {
+        StringSelection stringSelection = new StringSelection(str);
+        Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+        clipboard.setContents(stringSelection, null);
     }
 }
