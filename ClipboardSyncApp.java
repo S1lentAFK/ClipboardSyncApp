@@ -7,16 +7,19 @@ import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.Timer;
+import java.util.TimerTask;
 
 public class ClipboardSyncApp {
 
     private static String serverUrl = "http://16.170.246.163";
     private static String accessToken = "";
+    private static String lastClipboardContent = "";
 
     public static void main(String[] args) {
         JFrame frame = new JFrame("Clipboard Sync App");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(300, 300);
+        frame.setSize(300, 200);
 
         JPanel panel = new JPanel();
         frame.add(panel);
@@ -52,16 +55,6 @@ public class ClipboardSyncApp {
         registerButton.setBounds(100, 80, 100, 25);
         panel.add(registerButton);
 
-        JButton pushButton = new JButton("Push Clipboard");
-        pushButton.setBounds(10, 120, 250, 25);
-        pushButton.setEnabled(false);
-        panel.add(pushButton);
-
-        JButton pullButton = new JButton("Pull Clipboard");
-        pullButton.setBounds(10, 160, 250, 25);
-        pullButton.setEnabled(false);
-        panel.add(pullButton);
-
         loginButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -71,9 +64,8 @@ public class ClipboardSyncApp {
                     String response = login(username, password);
                     if (response != null) {
                         accessToken = response;
-                        pushButton.setEnabled(true);
-                        pullButton.setEnabled(true);
                         JOptionPane.showMessageDialog(panel, "Login successful!");
+                        startClipboardSync();
                     } else {
                         JOptionPane.showMessageDialog(panel, "Login failed!");
                     }
@@ -95,32 +87,6 @@ public class ClipboardSyncApp {
                     } else {
                         JOptionPane.showMessageDialog(panel, "Registration failed!");
                     }
-                } catch (IOException ex) {
-                    ex.printStackTrace();
-                }
-            }
-        });
-
-        pushButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                try {
-                    String clipboardContent = getClipboardContents();
-                    updateClipboard(clipboardContent);
-                    JOptionPane.showMessageDialog(panel, "Clipboard pushed!");
-                } catch (IOException | UnsupportedFlavorException ex) {
-                    ex.printStackTrace();
-                }
-            }
-        });
-
-        pullButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                try {
-                    String clipboardContent = fetchClipboard();
-                    setClipboardContents(clipboardContent);
-                    JOptionPane.showMessageDialog(panel, "Clipboard pulled!");
                 } catch (IOException ex) {
                     ex.printStackTrace();
                 }
@@ -175,6 +141,51 @@ public class ClipboardSyncApp {
         } else {
             return null;
         }
+    }
+
+    private static void startClipboardSync() {
+        // Sync clipboard on login
+        try {
+            String clipboardContent = fetchClipboard();
+            setClipboardContents(clipboardContent);
+            lastClipboardContent = clipboardContent;
+        } catch (IOException ex) {
+            ex.printStackTrace();
+        }
+
+        // Start monitoring clipboard changes
+        Timer clipboardMonitor = new Timer();
+        clipboardMonitor.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                try {
+                    String clipboardContent = getClipboardContents();
+                    if (!clipboardContent.equals(lastClipboardContent)) {
+                        updateClipboard(clipboardContent);
+                        lastClipboardContent = clipboardContent;
+                    }
+                } catch (IOException | UnsupportedFlavorException ex) {
+                    ex.printStackTrace();
+                }
+            }
+        }, 0, 2000); // Check every 2 seconds
+
+        // Start fetching clipboard updates
+        Timer clipboardFetcher = new Timer();
+        clipboardFetcher.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                try {
+                    String clipboardContent = fetchClipboard();
+                    if (!clipboardContent.equals(lastClipboardContent)) {
+                        setClipboardContents(clipboardContent);
+                        lastClipboardContent = clipboardContent;
+                    }
+                } catch (IOException ex) {
+                    ex.printStackTrace();
+                }
+            }
+        }, 0, 2000); // Check every 2 seconds
     }
 
     private static void updateClipboard(String clipboardContent) throws IOException {
